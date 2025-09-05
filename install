@@ -1,0 +1,78 @@
+# ----------------------------
+# Jexactyl Panel Auto Installer
+# ----------------------------
+# Run as root on Ubuntu 20.04+
+# ----------------------------
+
+# Update system
+apt update && apt upgrade -y
+
+# Install required packages
+apt install -y curl wget git unzip mariadb-server mariadb-client nginx \
+redis-server certbot python3-certbot-nginx php8.1 php8.1-{cli,gd,mysql,bcmath,mbstring,xml,curl,zip} composer
+
+# Create database
+mysql -u root -p -e "CREATE DATABASE jexactyl; CREATE USER 'jexactyl'@'127.0.0.1' IDENTIFIED BY 'StrongPasswordHere'; GRANT ALL PRIVILEGES ON jexactyl.* TO 'jexactyl'@'127.0.0.1'; FLUSH PRIVILEGES;"
+
+# Download Jexactyl
+cd /var/www/
+git clone https://github.com/jexactyl/jexactyl.git
+cd jexactyl
+
+# Install dependencies
+composer install --no-dev --optimize-autoloader
+
+# Set permissions
+chown -R www-data:www-data /var/www/jexactyl/*
+chmod -R 755 /var/www/jexactyl/storage /var/www/jexactyl/bootstrap/cache
+
+# Copy environment file
+cp .env.example .env
+
+# Generate app key
+php artisan key:generate --force
+
+# Run migrations
+php artisan migrate --seed --force
+
+# Set up queue worker
+echo "[Unit]
+Description=Jexactyl Queue Worker
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+ExecStart=/usr/bin/php /var/www/jexactyl/artisan queue:work --sleep=3 --tries=3
+
+[Install]
+WantedBy=multi-user.target" > /etc/systemd/system/jexactyl.service
+
+systemctl enable --now jexactyl
+
+# Set up Nginx
+echo "server {
+    listen 80;
+    server_name yourdomain.com;
+
+    root /var/www/jexactyl/public;
+    index index.php;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}" > /etc/nginx/sites-available/jexactyl.conf
+
+ln -s /etc/nginx/sites-available/jexactyl.conf /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# SSL with certbot (replace yourdomain.com with real domain)
+certbot --nginx -d yourdomain.com
