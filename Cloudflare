@@ -1,84 +1,49 @@
 #!/bin/bash
 
-set -euo pipefail
+set -e
 
-echo "🚀 CLOUDFLARE TUNNEL AUTOMATED SETUP"
+echo "🚀 Cloudflare Tunnel One-Click Setup"
 
-# Function to print error and exit
-function error_exit {
-    echo "❌ Error: $1"
-    exit 1
-}
+# Prompt for inputs
+read -p "Enter your tunnel name: " TUNNEL_NAME
+read -p "Enter your domain (e.g. example.com): " DOMAIN
+read -p "Enter your local service port (e.g. 8080): " PORT
 
-# Step 1: Install cloudflared if not installed
-if ! command -v cloudflared &> /dev/null; then
-    echo "1️⃣ Downloading & Installing cloudflared..."
-    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared || error_exit "Failed to download cloudflared"
-    chmod +x cloudflared || error_exit "Failed to chmod cloudflared"
-    if sudo -v; then
-        sudo mv cloudflared /usr/local/bin/ || error_exit "Failed to move cloudflared to /usr/local/bin"
-    else
-        error_exit "sudo is required to install cloudflared"
-    fi
-else
-    echo "✅ cloudflared already installed."
-fi
+# Step 1: Download & install cloudflared
+echo "Downloading and installing cloudflared..."
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+chmod +x cloudflared
+sudo mv cloudflared /usr/local/bin/
 
-# Step 2: Log in to Cloudflare (interactive)
-echo "2️⃣ Log in to your Cloudflare account..."
-cloudflared tunnel login || error_exit "Cloudflared login failed"
+# Step 2: Login to Cloudflare
+echo "Logging in to Cloudflare..."
+cloudflared tunnel login
 
-# Step 3: Ask for Tunnel details
-read -rp "Enter your Tunnel Name: " TUNNEL_NAME
-read -rp "Enter your Domain (e.g., example.com): " DOMAIN
-read -rp "Enter the Local Port your service runs on: " PORT
-
-# Step 4: Create the tunnel
-echo "3️⃣ Creating tunnel '$TUNNEL_NAME'..."
-TUNNEL_INFO=$(cloudflared tunnel create "$TUNNEL_NAME") || error_exit "Failed to create tunnel"
-
-# Extract Tunnel ID (UUID, 36 characters)
-TUNNEL_ID=$(echo "$TUNNEL_INFO" | grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}') || error_exit "Failed to extract Tunnel ID"
-if [[ -z "$TUNNEL_ID" ]]; then
-    error_exit "Tunnel ID not found in output"
-fi
+# Step 3: Create the tunnel
+echo "Creating tunnel named $TUNNEL_NAME..."
+TUNNEL_ID=$(cloudflared tunnel create "$TUNNEL_NAME" | grep -oP '(?<=Tunnel ID: )\S+')
 echo "Tunnel ID: $TUNNEL_ID"
 
-# Step 5: Create config file
+# Step 4: Create config file
 CONFIG_DIR="$HOME/.cloudflared"
-mkdir -p "$CONFIG_DIR" || error_exit "Failed to create config directory"
+mkdir -p "$CONFIG_DIR"
 CONFIG_FILE="$CONFIG_DIR/config.yml"
 
-echo "4️⃣ Writing config file..."
-cat > "$CONFIG_FILE" <<EOL
+echo "Creating config file at $CONFIG_FILE..."
+cat > "$CONFIG_FILE" <<EOF
 tunnel: $TUNNEL_ID
-credentials-file: $CONFIG_DIR/${TUNNEL_ID}.json
+credentials-file: $CONFIG_DIR/$TUNNEL_ID.json
 
 ingress:
   - hostname: $DOMAIN
     service: http://localhost:$PORT
   - service: http_status:404
-EOL
+EOF
 
-ingress:
-  - hostname: $DOMAIN
-    service: http://localhost:$PORT
-  - service: http_status:404
-EOL
+# Step 5: Route DNS to the tunnel
+echo "Routing DNS for $DOMAIN to tunnel $TUNNEL_NAME..."
+cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN"
 
-ingress:
-  - hostname: $DOMAIN
-    service: http://localhost:$PORT
-  - service: http_status:404
-EOL
-
-echo "✅ Config file created at $CONFIG_FILE"
-
-# Step 6: Route DNS
-echo "5️⃣ Routing DNS for $DOMAIN..."
-cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" || error_exit "Failed to route DNS"
-
-# Step 7: Run the tunnel (foreground)
-echo "6️⃣ Running the tunnel..."
-echo "Press Ctrl+C to stop the tunnel."
-cloudflared tunnel run "$TUNNEL_NAME" || error_exit "Failed to run tunnel"
+# Step 6: Run the tunnel
+echo "Starting the tunnel..."
+cloudflared tunnel run "$TUNNEL_NAME"
