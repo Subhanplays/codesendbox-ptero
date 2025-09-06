@@ -1,10 +1,8 @@
 #!/bin/bash
 
-echo "Installing Pterodactyl Wings with Docker..."
-
 # Step 1: Create directory structure
-mkdir -p pterodactyl/wings
-cd pterodactyl/wings || { echo "Failed to enter directory."; exit 1; }
+mkdir -p ~/subhangaming/pterodactyl/wings
+cd ~/subhangaming/pterodactyl/wings || exit
 
 # Step 2: Create docker-compose.yml file
 cat <<EOF > docker-compose.yml
@@ -25,7 +23,7 @@ services:
       TZ: "UTC"
       WINGS_UID: 988
       WINGS_GID: 988
-      WINGS_USERNAME: pterodactyl
+      WINGS_USERNAME: subhangaming
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers/:/var/lib/docker/containers/
@@ -34,6 +32,10 @@ services:
       - /var/log/pterodactyl/:/var/log/pterodactyl/
       - /tmp/pterodactyl/:/tmp/pterodactyl/
       - /etc/ssl/certs:/etc/ssl/certs:ro
+      # Optional: If upgrading from older daemon versions
+      # - /srv/daemon-data/:/srv/daemon-data/
+      # Optional: Required for SSL if using Let's Encrypt
+      # - /etc/letsencrypt/:/etc/letsencrypt/
 
 networks:
   wings0:
@@ -44,9 +46,9 @@ networks:
         - subnet: 172.21.0.0/16
     driver_opts:
       com.docker.network.bridge.name: wings0
+
 EOF
 
 # Step 3: Start Docker containers
 docker-compose up -d
 
-echo "✅ Wings installation completed!"
