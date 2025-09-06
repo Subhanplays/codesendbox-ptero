@@ -45,17 +45,29 @@ if [[ -z "$DOMAIN" || -z "$LOCAL_PORT" ]]; then
     exit 1
 fi
 
+# Step 4: Create tunnel
+TUNNEL_CREATE_OUTPUT=$(cloudflared tunnel create "$TUNNEL_NAME")
+# Extract tunnel ID and trim spaces/newlines
+TUNNEL_ID=$(echo "$TUNNEL_CREATE_OUTPUT" | grep -Eo '[0-9a-f\-]{36}' | tr -d '\n\r')
+
+if [[ -z "$TUNNEL_ID" ]]; then
+    echo "❌ Failed to create tunnel. Check your Cloudflare login."
+    exit 1
+fi
+
+echo "✅ Tunnel created with ID: $TUNNEL_ID"
+
 # Step 6: Create config file
 mkdir -p ~/.cloudflared
 CONFIG_FILE=~/.cloudflared/config.yml
 
 cat <<EOF > "$CONFIG_FILE"
-tunnel: $TUNNEL_ID
-credentials-file: /home/$USER/.cloudflared/$TUNNEL_ID.json
+tunnel: "$TUNNEL_ID"
+credentials-file: "/home/$USER/.cloudflared/$TUNNEL_ID.json"
 
 ingress:
   - hostname: "$DOMAIN"
-    service: http://localhost:$LOCAL_PORT
+    service: "http://localhost:$LOCAL_PORT"
   - service: "http_status:404"
 EOF
 
