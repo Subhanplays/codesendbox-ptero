@@ -35,7 +35,7 @@ CONFIG_FILE="$CONFIG_DIR/config.yml"
 echo "4️⃣ Writing config file..."
 cat > "$CONFIG_FILE" <<EOL
 tunnel: $TUNNEL_ID
-credentials-file: $CONFIG_DIR/$TUNNEL_ID.json
+credentials-file: /home/codespace/.cloudflared/$TUNNEL_ID.json
 
 ingress:
   - hostname: $DOMAIN
