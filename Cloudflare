@@ -20,16 +20,30 @@ echo "✅ Cloudflare login complete."
 
 # Step 3: Ask user for tunnel name
 read -rp "Enter a name for your tunnel: " TUNNEL_NAME
+if [[ -z "$TUNNEL_NAME" ]]; then
+    echo "❌ Tunnel name cannot be empty!"
+    exit 1
+fi
 
 # Step 4: Create tunnel
 TUNNEL_CREATE_OUTPUT=$(cloudflared tunnel create "$TUNNEL_NAME")
 TUNNEL_ID=$(echo "$TUNNEL_CREATE_OUTPUT" | grep -Eo '[0-9a-f\-]{36}')
+
+if [[ -z "$TUNNEL_ID" ]]; then
+    echo "❌ Failed to create tunnel. Check your Cloudflare login."
+    exit 1
+fi
 
 echo "✅ Tunnel created with ID: $TUNNEL_ID"
 
 # Step 5: Ask user for domain and local port
 read -rp "Enter your domain (e.g., example.com): " DOMAIN
 read -rp "Enter the local port to expose (e.g., 8080): " LOCAL_PORT
+
+if [[ -z "$DOMAIN" || -z "$LOCAL_PORT" ]]; then
+    echo "❌ Domain and port cannot be empty!"
+    exit 1
+fi
 
 # Step 6: Create config file
 mkdir -p ~/.cloudflared
@@ -40,9 +54,9 @@ tunnel: $TUNNEL_ID
 credentials-file: /home/$USER/.cloudflared/$TUNNEL_ID.json
 
 ingress:
-  - hostname: $DOMAIN
+  - hostname: "$DOMAIN"
     service: http://localhost:$LOCAL_PORT
-  - service: http_status:404
+  - service: "http_status:404"
 EOF
 
 echo "✅ Config file created at $CONFIG_FILE"
@@ -54,3 +68,4 @@ echo "✅ DNS routed for $DOMAIN"
 # Step 8: Run the tunnel
 echo "7️⃣ Running the tunnel..."
 cloudflared tunnel run "$TUNNEL_NAME"
+
