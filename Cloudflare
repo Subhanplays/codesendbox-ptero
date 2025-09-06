@@ -25,12 +25,12 @@ if [[ -z "$TUNNEL_NAME" ]]; then
     exit 1
 fi
 
-# Step 4: Create tunnel
+# Step 4: Create tunnel (only once!)
 TUNNEL_CREATE_OUTPUT=$(cloudflared tunnel create "$TUNNEL_NAME")
-TUNNEL_ID=$(echo "$TUNNEL_CREATE_OUTPUT" | grep -Eo '[0-9a-f\-]{36}')
+TUNNEL_ID=$(echo "$TUNNEL_CREATE_OUTPUT" | grep -Eo '[0-9a-f\-]{36}' | tr -d '\n\r')
 
 if [[ -z "$TUNNEL_ID" ]]; then
-    echo "❌ Failed to create tunnel. Check your Cloudflare login."
+    echo "❌ Failed to create tunnel. Check your Cloudflare login or if a tunnel with this name already exists."
     exit 1
 fi
 
@@ -44,18 +44,6 @@ if [[ -z "$DOMAIN" || -z "$LOCAL_PORT" ]]; then
     echo "❌ Domain and port cannot be empty!"
     exit 1
 fi
-
-# Step 4: Create tunnel
-TUNNEL_CREATE_OUTPUT=$(cloudflared tunnel create "$TUNNEL_NAME")
-# Extract tunnel ID and trim spaces/newlines
-TUNNEL_ID=$(echo "$TUNNEL_CREATE_OUTPUT" | grep -Eo '[0-9a-f\-]{36}' | tr -d '\n\r')
-
-if [[ -z "$TUNNEL_ID" ]]; then
-    echo "❌ Failed to create tunnel. Check your Cloudflare login."
-    exit 1
-fi
-
-echo "✅ Tunnel created with ID: $TUNNEL_ID"
 
 # Step 6: Create config file
 mkdir -p ~/.cloudflared
@@ -80,4 +68,5 @@ echo "✅ DNS routed for $DOMAIN"
 # Step 8: Run the tunnel
 echo "7️⃣ Running the tunnel..."
 cloudflared tunnel run "$TUNNEL_NAME"
+
 
