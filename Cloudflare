@@ -52,7 +52,19 @@ CONFIG_FILE="$CONFIG_DIR/config.yml"
 echo "4️⃣ Writing config file..."
 cat > "$CONFIG_FILE" <<EOL
 tunnel: $TUNNEL_ID
-credentials-file: $CONFIG_DIR/$TUNNEL_ID.json
+credentials-file: $CONFIG_DIR/${TUNNEL_ID}.json
+
+ingress:
+  - hostname: $DOMAIN
+    service: http://localhost:$PORT
+  - service: http_status:404
+EOL
+
+ingress:
+  - hostname: $DOMAIN
+    service: http://localhost:$PORT
+  - service: http_status:404
+EOL
 
 ingress:
   - hostname: $DOMAIN
