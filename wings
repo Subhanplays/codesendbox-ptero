@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Step 1: Create directory structure
-mkdir -p ~/subhangaming/pterodactyl/wings
-cd ~/subhangaming/pterodactyl/wings || exit
+mkdir -p pterodactyl/wings
+cd pterodactyl/wings || exit
 
 # Step 2: Create docker-compose.yml file
 cat <<EOF > docker-compose.yml
@@ -23,7 +23,7 @@ services:
       TZ: "UTC"
       WINGS_UID: 988
       WINGS_GID: 988
-      WINGS_USERNAME: subhangaming
+      WINGS_USERNAME: pterodactyl
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers/:/var/lib/docker/containers/
