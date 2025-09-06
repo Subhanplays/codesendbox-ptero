@@ -24,7 +24,10 @@ read -p "Enter the Local Port your service runs on: " PORT
 
 # Step 4: Create the tunnel
 echo "3️⃣ Creating tunnel '$TUNNEL_NAME'..."
-TUNNEL_ID=$(cloudflared tunnel create "$TUNNEL_NAME" | grep 'id:' | awk '{print $2}')
+TUNNEL_INFO=$(cloudflared tunnel create "$TUNNEL_NAME")
+
+# Extract Tunnel ID (UUID, 36 characters)
+TUNNEL_ID=$(echo "$TUNNEL_INFO" | grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 echo "Tunnel ID: $TUNNEL_ID"
 
 # Step 5: Create config file
@@ -35,7 +38,7 @@ CONFIG_FILE="$CONFIG_DIR/config.yml"
 echo "4️⃣ Writing config file..."
 cat > "$CONFIG_FILE" <<EOL
 tunnel: $TUNNEL_ID
-credentials-file: /home/codespace/.cloudflared/$TUNNEL_ID.json
+credentials-file: $CONFIG_DIR/$TUNNEL_ID.json
 
 ingress:
   - hostname: $DOMAIN
