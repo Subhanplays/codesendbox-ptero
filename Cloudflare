@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ===============================
-# 🚀 One-Click Cloudflare Tunnel Setup
+# 🚀 Interactive Cloudflare Tunnel Setup
 # ===============================
 
 echo "🚀 Cloudflare Tunnel Setup Starting..."
@@ -20,15 +20,18 @@ echo "✅ Cloudflare login complete."
 
 # Step 3: Ask user for tunnel name
 read -rp "Enter a name for your tunnel: " TUNNEL_NAME
-TUNNEL_ID=$(cloudflared tunnel create "$TUNNEL_NAME" | grep -Eo '[0-9a-f\-]{36}')
+
+# Step 4: Create tunnel
+TUNNEL_CREATE_OUTPUT=$(cloudflared tunnel create "$TUNNEL_NAME")
+TUNNEL_ID=$(echo "$TUNNEL_CREATE_OUTPUT" | grep -Eo '[0-9a-f\-]{36}')
 
 echo "✅ Tunnel created with ID: $TUNNEL_ID"
 
-# Step 4: Ask user for domain and local port
+# Step 5: Ask user for domain and local port
 read -rp "Enter your domain (e.g., example.com): " DOMAIN
 read -rp "Enter the local port to expose (e.g., 8080): " LOCAL_PORT
 
-# Step 5: Create config file
+# Step 6: Create config file
 mkdir -p ~/.cloudflared
 CONFIG_FILE=~/.cloudflared/config.yml
 
@@ -44,10 +47,10 @@ EOF
 
 echo "✅ Config file created at $CONFIG_FILE"
 
-# Step 6: Route DNS
+# Step 7: Route DNS
 cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN"
 echo "✅ DNS routed for $DOMAIN"
 
-# Step 7: Run the tunnel
+# Step 8: Run the tunnel
 echo "7️⃣ Running the tunnel..."
 cloudflared tunnel run "$TUNNEL_NAME"
