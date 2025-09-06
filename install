@@ -1,125 +1,94 @@
-#!/bin/bash
-# Made by SubhanPlays
-# Jexactyl Panel installation script for Ubuntu 20.04/22.04+
-
-set -e
-
-echo "🚀 Starting Jexactyl Panel installation..."
-
-# -------------------
-# 1️⃣ Install Dependencies
-# -------------------
-echo "[1/8] Installing dependencies..."
-apt -y update
-apt -y install software-properties-common curl apt-transport-https ca-certificates gnupg lsb-release
-
-LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
-
-# Redis repo
-curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/redis.list
-
-# MariaDB repo (optional)
-curl -LsS https://r.mariadb.com/downloads/mariadb_repo_setup | bash || true
-
+# Install Docker Compose
 apt update
-apt -y install php8.1 php8.1-{cli,gd,mysql,pdo,mbstring,tokenizer,bcmath,xml,fpm,curl,zip} \
-mariadb-server nginx tar unzip git redis
+apt install docker-compose -y
 
-# Composer
-curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+# Setup directories
+mkdir -p pterodactyl/panel
+cd pterodactyl/panel || exit 1
 
-# -------------------
-# 2️⃣ Create Directory
-# -------------------
-echo "[2/8] Creating panel directory..."
-mkdir -p /var/www/jexactyl
-cd /var/www/jexactyl || exit
+# Write docker-compose.yml
+cat <<EOF > docker-compose.yml
+version: '3.8'
 
-# -------------------
-# 3️⃣ Download Panel
-# -------------------
-echo "[3/8] Downloading Jexactyl panel..."
-curl -Lo panel.tar.gz https://github.com/jexactyl/jexactyl/releases/latest/download/panel.tar.gz
-tar -xzvf panel.tar.gz
-chmod -R 755 storage/* bootstrap/cache/
+x-common:
+  database:
+    &db-environment
+    MYSQL_PASSWORD: &db-password "CHANGE_ME"
+    MYSQL_ROOT_PASSWORD: "CHANGE_ME_TOO"
+  panel:
+    &panel-environment
+    APP_URL: "https://pterodactyl.example.com"
+    APP_TIMEZONE: "UTC"
+    APP_SERVICE_AUTHOR: "noreply@example.com"
+    TRUSTED_PROXIES: "*"
+  mail:
+    &mail-environment
+    MAIL_FROM: "noreply@example.com"
+    MAIL_DRIVER: "smtp"
+    MAIL_HOST: "mail"
+    MAIL_PORT: "1025"
+    MAIL_USERNAME: ""
+    MAIL_PASSWORD: ""
+    MAIL_ENCRYPTION: "true"
 
-# -------------------
-# 4️⃣ Setup Database
-# -------------------
-echo "[4/8] Setting up database..."
-sudo systemctl start mariadb
-sudo systemctl enable mariadb
+services:
+  database:
+    image: mariadb:10.5
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - "./data/database:/var/lib/mysql"
+    environment:
+      <<: *db-environment
+      MYSQL_DATABASE: "panel"
+      MYSQL_USER: "pterodactyl"
 
-echo "Please enter your desired MySQL root password:"
-read -s ROOT_PASS
-echo "Please enter your desired Jexactyl database password:"
-read -s DB_PASS
+  cache:
+    image: redis:alpine
+    restart: always
 
-mysql -u root <<MYSQL_SCRIPT
-CREATE USER 'jexactyl'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
-CREATE DATABASE panel;
-GRANT ALL PRIVILEGES ON panel.* TO 'jexactyl'@'127.0.0.1' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
-MYSQL_SCRIPT
+  panel:
+    image: ghcr.io/pterodactyl/panel:latest
+    restart: always
+    ports:
+      - "8030:80"
+      - "4433:443"
+    links:
+      - database
+      - cache
+    volumes:
+      - "./data/var:/app/var"
+      - "./data/nginx:/etc/nginx/http.d"
+      - "./data/certs:/etc/letsencrypt"
+      - "./data/logs:/app/storage/logs"
+    environment:
+      <<: [*panel-environment, *mail-environment]
+      DB_PASSWORD: *db-password
+      APP_ENV: "production"
+      APP_ENVIRONMENT_ONLY: "false"
+      CACHE_DRIVER: "redis"
+      SESSION_DRIVER: "redis"
+      QUEUE_DRIVER: "redis"
+      REDIS_HOST: "cache"
+      DB_HOST: "database"
+      DB_PORT: "3306"
 
-# -------------------
-# 5️⃣ Install Composer Packages & Configure Env
-# -------------------
-echo "[5/8] Installing composer packages and configuring environment..."
-cp .env.example .env
-composer install --no-dev --optimize-autoloader
-php artisan key:generate --force
-php artisan p:environment:setup
-php artisan p:environment:database
-php artisan p:environment:mail
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+EOF
 
-# -------------------
-# 6️⃣ Database Migration & Admin User
-# -------------------
-echo "[6/8] Migrating database..."
-php artisan migrate --seed --force
+# Create data directories
+mkdir -p ./data/{database,var,nginx,certs,logs}
 
-echo "[6/8] Create an admin user:"
-php artisan p:user:make
+# Start Pterodactyl containers
+docker-compose up -d
 
-# -------------------
-# 7️⃣ Assign Permissions
-# -------------------
-echo "[7/8] Setting permissions..."
-chown -R www-data:www-data /var/www/jexactyl/*
-chmod -R 755 /var/www/jexactyl/storage /var/www/jexactyl/bootstrap/cache
+# Create Admin User
+docker-compose run --rm panel php artisan p:user:make
 
-# -------------------
-# 8️⃣ Crontab
-# -------------------
-echo "[8/8] Setting up cronjob..."
-(crontab -l 2>/dev/null; echo "* * * * * php /var/www/jexactyl/artisan schedule:run >> /dev/null 2>&1") | crontab -
+echo "✅ All done! Enjoy"
 
-# -------------------
-# 9️⃣ Systemd Queue Worker
-# -------------------
-echo "[9/8] Setting up systemd queue worker..."
-cat > /etc/systemd/system/panel.service <<EOL
-[Unit]
-Description=Jexactyl Queue Worker
-[Service]
-User=www-data
-Group=www-data
-Restart=always
-ExecStart=/usr/bin/php /var/www/jexactyl/artisan queue:work --queue=high,standard,low --sleep=3 --tries=3
-StartLimitInterval=180
-StartLimitBurst=30
-RestartSec=5s
-[Install]
-WantedBy=multi-user.target
-EOL
-
-systemctl enable --now panel.service
-systemctl enable --now redis-server
-
-echo "--------------------------------------------------"
-echo " ✅ Jexactyl Panel installed successfully!"
-echo " Open your panel in the browser and login with the admin user you created."
-echo "--------------------------------------------------"
 
